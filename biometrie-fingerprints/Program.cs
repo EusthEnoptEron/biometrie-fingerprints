@@ -7,6 +7,8 @@ using Emgu.CV.Structure;
 using Emgu.CV.GPU;
 using System.Drawing;
 using System.Management.Instrumentation;
+using System.Threading;
+using Emgu.CV.CvEnum;
 
 namespace Biometrie
 {
@@ -91,7 +93,6 @@ namespace Biometrie
                     }
                 }
 
-
                 // 4. Make simple skeleton
                 var skeleton = Skeletize(image);
 
@@ -101,20 +102,71 @@ namespace Biometrie
 
                 quality.Dispose();
                 vectorImage.Dispose();
+
             }
         }
 
 
         private static Image<Gray, byte> ImproveImage(Image<Gray, byte> src)
         {
-            var improvedImage = src.Clone();
-            //improvedImage._EqualizeHist();
-            improvedImage._GammaCorrect(5.8d);
-            improvedImage._Dilate(1);
-            improvedImage._Erode(1);
+            var improvedImage = src.Clone().Convert<Gray, float>();
+            improvedImage.Save("image.original.png");
+
+            // Adapted from: http://stackoverflow.com/questions/16812950/how-do-i-compute-dft-and-its-reverse-with-emgu
+            
+            Matrix<float> dft  = DFT(improvedImage);
+            Matrix<float> mask = new Matrix<float>(dft.Size);
+
+            
+            CvInvoke.cvCircle(mask, new Point(256, 256), 81, new MCvScalar(255), -1, LINE_TYPE.CV_AA, 0);
+
+            for (int x = 0; x < mask.Cols; x++)
+            {
+                for (int y = 0; y < mask.Rows; y++)
+                {
+                    int fX = (mask.Cols / 2) - Math.Abs(x - mask.Cols / 2);
+                    int fY = (mask.Rows / 2) - Math.Abs(y - mask.Rows / 2);
+
+                    if (Math.Sqrt(fX * fX + fY * fY) > 90)
+                    {
+                        dft.Data[y, x * dft.NumberOfChannels + 0] = 0;
+                        dft.Data[y, x * dft.NumberOfChannels + 1] = 0;
+                    }
+                }
+            }
            
-            return improvedImage;
+            // We'll display the magnitude
+            Matrix<float> forwardDftMagnitude = GetDftMagnitude(dft);
+            SwitchQuadrants(ref forwardDftMagnitude);
+            CvInvoke.cvNormalize(forwardDftMagnitude, forwardDftMagnitude, 0, 255.0, NORM_TYPE.CV_MINMAX, IntPtr.Zero);
+            //forwardDftMagnitude = forwardDftMagnitude - mask;
+            forwardDftMagnitude.Save("image.fourier.png");
+
+
+            Matrix<float> reverseDft = new Matrix<float>(src.Rows, src.Cols, 2);
+            CvInvoke.cvDFT(dft, reverseDft, CV_DXT.CV_DXT_INV_SCALE, 0);
+            Matrix<float> reverseDftMagnitude = GetDftMagnitude(reverseDft);
+            CvInvoke.cvNormalize(reverseDftMagnitude, reverseDftMagnitude, 0, 255.0, NORM_TYPE.CV_MINMAX, IntPtr.Zero);
+            reverseDftMagnitude.Save("image.reversed.png");
+
+
+            //improvedImage._GammaCorrect(2.8d);
+
+            // Raise contrast
+            improvedImage = (improvedImage / 255.0).Pow(4) * 255.0;
+            //improvedImage._EqualizeHist();
+
+            // Close
+            //improvedImage._Dilate(1);
+            //improvedImage._Erode(1);
+
+            improvedImage.Save("image.improved.png");
+
+           
+            return improvedImage.Convert<Gray, byte>();
         }
+
+
 
         private static Vector2[,] GetVectorMatrix(Image<Gray, byte> src, Image<Gray, byte> mask = null)
         {
@@ -207,5 +259,66 @@ namespace Biometrie
             return skel.Not();
         }
 
+
+        private static Matrix<float> DFT(Image<Gray, float> image)
+        {
+
+            // Transform 1 channel grayscale image into 2 channel image
+            IntPtr complexImage = CvInvoke.cvCreateImage(image.Size, Emgu.CV.CvEnum.IPL_DEPTH.IPL_DEPTH_32F, 2);
+            CvInvoke.cvSetImageCOI(complexImage, 1); // Select the channel to copy into
+            CvInvoke.cvCopy(image, complexImage, IntPtr.Zero);
+            CvInvoke.cvSetImageCOI(complexImage, 0); // Select all channels
+
+            // This will hold the DFT data
+            Matrix<float> forwardDft = new Matrix<float>(image.Rows, image.Cols, 2);
+            CvInvoke.cvDFT(complexImage, forwardDft, Emgu.CV.CvEnum.CV_DXT.CV_DXT_FORWARD, 0);
+
+            CvInvoke.cvReleaseImage(ref complexImage);
+
+            return forwardDft;
+        }
+
+         // We have to switch quadrants so that the origin is at the image center
+        private static void SwitchQuadrants(ref Matrix<float> matrix)
+        {
+            int cx = matrix.Cols / 2;
+            int cy = matrix.Rows / 2;
+
+            Matrix<float> q0 = matrix.GetSubRect(new Rectangle(0, 0, cx, cy));
+            Matrix<float> q1 = matrix.GetSubRect(new Rectangle(cx, 0, cx, cy));
+            Matrix<float> q2 = matrix.GetSubRect(new Rectangle(0, cy, cx, cy));
+            Matrix<float> q3 = matrix.GetSubRect(new Rectangle(cx, cy, cx, cy));
+            Matrix<float> tmp = new Matrix<float>(q0.Size);
+
+            q0.CopyTo(tmp);
+            q3.CopyTo(q0);
+            tmp.CopyTo(q3);
+            q1.CopyTo(tmp);
+            q2.CopyTo(q1);
+            tmp.CopyTo(q2);
+        }
+
+        // Real part is magnitude, imaginary is phase. 
+        // Here we compute log(sqrt(Re^2 + Im^2) + 1) to get the magnitude and 
+        // rescale it so everything is visible
+        private static Matrix<float> GetDftMagnitude(Matrix<float> fftData)
+        {
+            //The Real part of the Fourier Transform
+            Matrix<float> outReal = new Matrix<float>(fftData.Size);
+            //The imaginary part of the Fourier Transform
+            Matrix<float> outIm = new Matrix<float>(fftData.Size);
+            CvInvoke.cvSplit(fftData, outReal, outIm, IntPtr.Zero, IntPtr.Zero);
+
+            CvInvoke.cvPow(outReal, outReal, 2.0);
+            CvInvoke.cvPow(outIm, outIm, 2.0);
+
+            CvInvoke.cvAdd(outReal, outIm, outReal, IntPtr.Zero);
+            CvInvoke.cvPow(outReal, outReal, 0.5);
+
+            CvInvoke.cvAddS(outReal, new MCvScalar(1.0), outReal, IntPtr.Zero); // 1 + Mag
+            CvInvoke.cvLog(outReal, outReal); // log(1 + Mag)            
+
+            return outReal;
+        }
     }
 }
