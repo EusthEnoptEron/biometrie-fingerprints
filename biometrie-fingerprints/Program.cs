@@ -40,7 +40,9 @@ namespace Biometrie
 
         private static void Main(string[] args)
         {
-            args = new string[] {@"..\..\fp-images\10_2.bmp"};
+            args = new string[] { @"..\..\fp-images\10_2.bmp" };
+            //args = new string[] { @"..\..\fp-images\boy1.gif" };
+            //args = new string[] { @"..\..\fp-images\sine16.png" };
             if (args.Length == 0) return;
 
             using (var src = new Image<Gray, byte>(args[0]))
@@ -54,7 +56,7 @@ namespace Biometrie
 
 
                 // 2. Calculate vectors
-                var G = GetVectorMatrix(src);
+                var G = GetVectorMatrix(image);
                 G = GetAverageVectorMatrix(G, BLOCK_SIZE);
                 
                 // 3. Draw vectors on an image
@@ -113,7 +115,6 @@ namespace Biometrie
             improvedImage.Save("image.original.png");
 
             // Adapted from: http://stackoverflow.com/questions/16812950/how-do-i-compute-dft-and-its-reverse-with-emgu
-            
             Matrix<float> dft  = DFT(improvedImage);
             Matrix<float> mask = new Matrix<float>(dft.Size);
 
@@ -125,15 +126,23 @@ namespace Biometrie
                 for (int y = 0; y < mask.Rows; y++)
                 {
                     int fX = (mask.Cols / 2) - Math.Abs(x - mask.Cols / 2);
-                    int fY = (mask.Rows / 2) - Math.Abs(y - mask.Rows / 2);
+                    float fY = ((mask.Rows / 2) - Math.Abs(y - mask.Rows / 2)); //* 0.6f;
 
-                    if (Math.Sqrt(fX * fX + fY * fY) > 90)
+                    var magnitude = Math.Sqrt(fX * fX + fY * fY);
+
+
+                    if (magnitude < 30 || magnitude > 80)
+                    //if (magnitude < 60)
                     {
-                        dft.Data[y, x * dft.NumberOfChannels + 0] = 0;
-                        dft.Data[y, x * dft.NumberOfChannels + 1] = 0;
+                        //if (magnitude < 1) continue;
+
+                        dft.Data[y, x * dft.NumberOfChannels + 0] *= 0.1f;
+                        dft.Data[y, x * dft.NumberOfChannels + 1] *= 0.1f;
                     }
                 }
             }
+
+
            
             // We'll display the magnitude
             Matrix<float> forwardDftMagnitude = GetDftMagnitude(dft);
@@ -145,14 +154,24 @@ namespace Biometrie
 
             Matrix<float> reverseDft = new Matrix<float>(src.Rows, src.Cols, 2);
             CvInvoke.cvDFT(dft, reverseDft, CV_DXT.CV_DXT_INV_SCALE, 0);
-            Matrix<float> reverseDftMagnitude = GetDftMagnitude(reverseDft);
-            CvInvoke.cvNormalize(reverseDftMagnitude, reverseDftMagnitude, 0, 255.0, NORM_TYPE.CV_MINMAX, IntPtr.Zero);
-            reverseDftMagnitude.Save("image.reversed.png");
+            CvInvoke.cvConvert(reverseDft.Split()[0], improvedImage);
+            //CvInvoke.cvNormalize(improvedImage, improvedImage, 0, 255.0, NORM_TYPE.CV_MINMAX, IntPtr.Zero);
 
+            improvedImage.Save("image.improved0.png");
+
+            //Matrix<float> reverseDftMagnitude = GetDftMagnitude(reverseDft);
+            //CvInvoke.cvNormalize(reverseDftMagnitude, reverseDftMagnitude, 0, 255.0, NORM_TYPE.CV_MINMAX, IntPtr.Zero);
+            //reverseDft.Save("image.reversed.png");
+
+            //CvInvoke.cvConvert(reverseDftMagnitude, improvedImage);
 
             //improvedImage._GammaCorrect(2.8d);
 
             // Raise contrast
+            var invert = new Image<Gray, float>(improvedImage.Size);
+            invert.SetValue(255);
+
+            improvedImage = invert - improvedImage;
             improvedImage = (improvedImage / 255.0).Pow(4) * 255.0;
             //improvedImage._EqualizeHist();
 
@@ -162,7 +181,6 @@ namespace Biometrie
 
             improvedImage.Save("image.improved.png");
 
-           
             return improvedImage.Convert<Gray, byte>();
         }
 
@@ -271,8 +289,8 @@ namespace Biometrie
 
             // This will hold the DFT data
             Matrix<float> forwardDft = new Matrix<float>(image.Rows, image.Cols, 2);
-            CvInvoke.cvDFT(complexImage, forwardDft, Emgu.CV.CvEnum.CV_DXT.CV_DXT_FORWARD, 0);
-
+            CvInvoke.cvDFT(complexImage, forwardDft, CV_DXT.CV_DXT_FORWARD, 0);
+           
             CvInvoke.cvReleaseImage(ref complexImage);
 
             return forwardDft;
@@ -317,8 +335,10 @@ namespace Biometrie
 
             CvInvoke.cvAddS(outReal, new MCvScalar(1.0), outReal, IntPtr.Zero); // 1 + Mag
             CvInvoke.cvLog(outReal, outReal); // log(1 + Mag)            
-
+            
             return outReal;
         }
+
+
     }
 }
