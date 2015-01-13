@@ -87,7 +87,6 @@ namespace Biometrie
                 // 4. Make simple skeleton
                 var skeleton = Skeletize(image);
 
-
                 debug(skeleton, "skeleton");
                 save(vectorImage, "result");
 
@@ -283,16 +282,16 @@ namespace Biometrie
         {
             // Create inverted copy
             image = image.Clone().Not();//.ThresholdBinary(new Gray(100), new Gray(255));
-
             // Code adapted from http://felix.abecassis.me/2011/09/opencv-morphological-skeleton/
             Image<Gray, Byte> eroded = new Image<Gray, byte>(image.Size);
             Image<Gray, Byte> temp = new Image<Gray, byte>(image.Size);
             Image<Gray, Byte> skel = new Image<Gray, byte>(image.Size);
 
             skel.SetValue(0);
-            CvInvoke.cvThreshold(image, image, 127, 256, 0);
+            CvInvoke.cvThreshold(image, image, 220, 256, 0);
 
-            StructuringElementEx kernel = new StructuringElementEx(3, 3, 1, 1, Emgu.CV.CvEnum.CV_ELEMENT_SHAPE.CV_SHAPE_RECT);
+
+            StructuringElementEx kernel = new StructuringElementEx(3, 3, 1, 1, Emgu.CV.CvEnum.CV_ELEMENT_SHAPE.CV_SHAPE_CROSS);
             bool done = false;
 
             int i = 0;
@@ -303,13 +302,11 @@ namespace Biometrie
                 CvInvoke.cvDilate(eroded, temp, kernel, 1);
                 temp = image - temp;
                 skel = skel | temp;
-
                 image = eroded.Clone();
 
                 if (CvInvoke.cvCountNonZero(image) == 0)
                     break;
             }
-
             return skel.Not();
         }
 
