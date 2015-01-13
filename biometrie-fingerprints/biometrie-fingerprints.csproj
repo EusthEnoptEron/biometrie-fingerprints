@@ -16,7 +16,6 @@
     </TargetFrameworkProfile>
     <EmguCVPrivate>true</EmguCVPrivate>
     <CopyOpenCVBins>true</CopyOpenCVBins>
-    <RestorePackages>true</RestorePackages>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -171,7 +170,6 @@
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />
   <PropertyGroup>
     <PostBuildEvent>xcopy /s $(TargetDir)x86 $(TargetDir)
 del /q /s $(TargetDir)x86</PostBuildEvent>
@@ -180,13 +178,6 @@ del /q /s $(TargetDir)x86</PostBuildEvent>
     <PreBuildEvent>
     </PreBuildEvent>
   </PropertyGroup>
-  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
-    <PropertyGroup>
-      <ErrorText>This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
-    </PropertyGroup>
-    <Error Condition="!Exists('..\packages\VVVV.EmguCV.2.4.2.1\build\net40\VVVV.EmguCV.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\VVVV.EmguCV.2.4.2.1\build\net40\VVVV.EmguCV.props'))" />
-    <Error Condition="!Exists('..\packages\VVVV.EmguCV.2.4.2.1\build\net40\VVVV.EmguCV.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\VVVV.EmguCV.2.4.2.1\build\net40\VVVV.EmguCV.targets'))" />
-  </Target>
   <Import Project="..\packages\VVVV.EmguCV.2.4.2.1\build\net40\VVVV.EmguCV.targets" Condition="Exists('..\packages\VVVV.EmguCV.2.4.2.1\build\net40\VVVV.EmguCV.targets')" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
