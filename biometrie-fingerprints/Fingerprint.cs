@@ -15,7 +15,7 @@ namespace Biometrie
     /// </summary>
     class Fingerprint
     {
-        private const int BLOCK_SIZE = 10;
+        private const int BLOCK_SIZE = 8;
 
         private FileInfo fileInfo;
         private string baseName;
